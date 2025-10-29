@@ -1,0 +1,11 @@
+[app]
+port = 8101
+scheduler_interval_seconds = 180
+
+[database]
+url = "sqlite:///./data/lifeform.db"
+
+[logging]
+level = "INFO"
+console_rich = true
+file_path = "logs/app.jsonl"
