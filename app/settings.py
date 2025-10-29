@@ -5,9 +5,9 @@ import os
 from pathlib import Path
 from typing import Any
 
-import tomllib
 from pydantic import Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic_settings.sources import TomlConfigSettingsSource
 
 
 class Settings(BaseSettings):
@@ -50,21 +50,29 @@ class Settings(BaseSettings):
 
     @classmethod
     def _toml_config_settings_source(cls) -> PydanticBaseSettingsSource:
-        class TomlConfigSource(PydanticBaseSettingsSource):
-            def __call__(self) -> dict[str, Any]:
+        class FlattenedTomlConfigSource(TomlConfigSettingsSource):
+            def __init__(self, settings_cls: type[BaseSettings]):
                 path_override = os.getenv("CONFIG_PATH")
-                path = Path(path_override) if path_override else Path("config.toml")
-                if not path.exists():
-                    return {}
-                with path.open("rb") as handle:
-                    data = tomllib.load(handle)
+                default_path = cls.model_fields.get("config_path")
+                if path_override:
+                    base_path = Path(path_override)
+                elif default_path and default_path.default is not None:
+                    base_path = Path(default_path.default)
+                else:
+                    base_path = Path("config.toml")
+                super().__init__(settings_cls=settings_cls, toml_file=base_path)
+
+            def __call__(self) -> dict[str, Any]:
+                data = super().__call__()
                 flattened: dict[str, Any] = {}
-                for section in data.values():
-                    if isinstance(section, dict):
-                        flattened.update(section)
+                for key, value in data.items():
+                    if isinstance(value, dict):
+                        flattened.update(value)
+                    else:
+                        flattened[key] = value
                 return flattened
 
-        return TomlConfigSource(settings_cls=cls)
+        return FlattenedTomlConfigSource(settings_cls=cls)
 
 
 def get_settings() -> Settings:
